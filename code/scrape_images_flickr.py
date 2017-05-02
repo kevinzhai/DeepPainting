@@ -3,7 +3,6 @@ import os
 import lxml.etree as etree
 import urllib
 
-
 """
 Parameters
 
@@ -14,8 +13,10 @@ n_per_class: number of images to download per style
 directory = "../data/flickr"
 styles_dict = {'cubism': ['cubist painting', 'cubism painting'],
                'pop-art': ['pop art painting'],
-               "impressionism": ['impressionist painting']}
-n_per_class = 40
+               'hyperrealism': ['hyperrealistic painting', 'hyperrealism painting'],
+               'impressionism': ['impressionist painting', 'impressionism painting'],
+               'abstract-expressionism': ['abstract expressionist painting', 'abstract expressionism painting']}
+n_per_class = 100
 
 
 class FlickrScraper:
@@ -71,7 +72,7 @@ class FlickrScraper:
         Returns list of urls with searching for searchterm
         '''
         flickr = flickrapi.FlickrAPI(self.api_key, self.api_secret)
-        
+
         # Generate URL list
         urls = []
         retrieved = 0
