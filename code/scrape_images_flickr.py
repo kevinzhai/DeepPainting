@@ -16,7 +16,7 @@ styles_dict = {'cubism': ['cubist painting', 'cubism painting'],
                'hyperrealism': ['hyperrealistic painting', 'hyperrealism painting'],
                'impressionism': ['impressionist painting', 'impressionism painting'],
                'abstract-expressionism': ['abstract expressionist painting', 'abstract expressionism painting']}
-n_per_class = 100
+n_per_class = 101
 
 
 class FlickrScraper:
@@ -45,7 +45,7 @@ class FlickrScraper:
         for i, url in enumerate(url_list):
             # Grab file extension
             ext = url[-4:]
-            filename = os.path.join(dirpath, classname + "-" + str(i) + ext)
+            filename = os.path.join(dirpath, (classname + "-%05d" + ext) % i)
 
             # Some images are displayed without file extension
             if filename[-4:] not in ['.jpg', '.png', 'jpeg']:
