@@ -16,7 +16,7 @@ styles_dict = {'cubism': ['cubist painting', 'cubism painting'],
                'hyperrealism': ['hyperrealistic painting', 'hyperrealism painting'],
                'impressionism': ['impressionist painting', 'impressionism painting'],
                'abstract-expressionism': ['abstract expressionist painting', 'abstract expressionism painting']}
-n_per_class = 101
+n_per_class = 20000
 
 
 class FlickrScraper:
@@ -53,7 +53,7 @@ class FlickrScraper:
 
             try:
                 urllib.request.urlretrieve(url, filename=filename)
-            except:
+            except Exception:
                 print("url", url, "\nfilename", filename)
                 print("Skipping image ", url_list.index(url))
 
@@ -80,24 +80,24 @@ class FlickrScraper:
 
         while retrieved < n:
             fsearch = flickr.photos_search(text=searchterm, page=page, per_page=500, extras=["url_m"], sort="relevance")
+            page += 1
 
             # Iterate through each child node of the xmltree
             for i in range(0, 499):
-                metadata = str(etree.tostring(fsearch[0][i]))
-
-                # Must check for url as some are private
-                if 'url' in metadata:
-                    urls.append(self.get_flickr_url(metadata))
-                    retrieved += 1
+                try:
+                    # Must check for url as some are private
+                    metadata = str(etree.tostring(fsearch[0][i]))
+                    if 'url' in metadata:
+                        urls.append(self.get_flickr_url(metadata))
+                        retrieved += 1
+                except Exception:
+                    pass
 
                 if retrieved % 100 == 0:
-                    print(self.get_flickr_url(metadata))
-                    print(retrieved, 'done')
+                    print(retrieved, 'urls retrieved')
 
                 if retrieved >= n:
                     break
-
-            page += 1
 
         return urls
 
