@@ -2,6 +2,7 @@ import flickrapi
 import os
 import lxml.etree as etree
 import urllib
+from tqdm import tqdm
 
 """
 Parameters
@@ -16,7 +17,7 @@ styles_dict = {'cubism': ['cubist painting', 'cubism painting'],
                'hyperrealism': ['hyperrealistic painting', 'hyperrealism painting'],
                'impressionism': ['impressionist painting', 'impressionism painting'],
                'abstract-expressionism': ['abstract expressionist painting', 'abstract expressionism painting']}
-n_per_class = 20000
+n_per_class = 10000
 
 
 class FlickrScraper:
@@ -41,11 +42,12 @@ class FlickrScraper:
               "Results will be saved in:", dirpath, "\n")
 
         url_list = self.get_flickr_url_list(searchterm, n)
+        initial_file_count = len(os.listdir(dirpath))
 
-        for i, url in enumerate(url_list):
+        for i, url in enumerate(tqdm(url_list)):
             # Grab file extension
             ext = url[-4:]
-            filename = os.path.join(dirpath, (classname + "-%05d" + ext) % i)
+            filename = os.path.join(dirpath, (classname + "-%05d" + ext) % (initial_file_count + i))
 
             # Some images are displayed without file extension
             if filename[-4:] not in ['.jpg', '.png', 'jpeg']:
@@ -56,8 +58,6 @@ class FlickrScraper:
             except Exception:
                 print("url", url, "\nfilename", filename)
                 print("Skipping image ", url_list.index(url))
-
-            print(url_list.index(url), " of ", len(url_list), "downloaded")
 
     def get_flickr_url(self, node):
         '''
