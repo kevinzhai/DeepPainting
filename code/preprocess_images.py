@@ -3,6 +3,13 @@ from skimage import io, transform
 import tqdm
 
 
+def is_color(img):
+    """
+    returns True if the image has 3 channels, signifying RGB
+    """
+    return len(img.shape) == 3
+
+
 def square_crop(img):
     """
     crops an image into a square
@@ -41,9 +48,10 @@ def process_all_imgs(img_dir, target_dir):
     for img_fname in tqdm.tqdm(img_list):
 
         img = io.imread(os.path.join(img_dir, img_fname))
-        img = square_crop(img)
-        img = correct_resolution(img, 224)  # change to 224 resolution
-        io.imsave(os.path.join(target_dir, img_fname), img)
+        if is_color(img):
+            img = square_crop(img)
+            img = correct_resolution(img, 224)  # change to 224 resolution
+            io.imsave(os.path.join(target_dir, img_fname), img)
 
 
 if __name__ == "__main__":
