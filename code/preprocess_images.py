@@ -2,6 +2,10 @@ import os
 from skimage import io, transform
 import tqdm
 
+# PARAMETERS
+IMAGE_DIRECTORY = "../data/flickr"
+RESOLUTION = 32
+
 
 def is_color(img):
     """
@@ -50,12 +54,11 @@ def process_all_imgs(img_dir, target_dir):
         img = io.imread(os.path.join(img_dir, img_fname))
         if is_color(img):
             img = square_crop(img)
-            img = correct_resolution(img, 224)  # change to 224 resolution
+            img = correct_resolution(img, RESOLUTION)  # change to 224 resolution
             io.imsave(os.path.join(target_dir, img_fname), img)
 
 
 if __name__ == "__main__":
-    IMAGE_DIRECTORY = "../data/flickr"
     image_dirs = next(os.walk(IMAGE_DIRECTORY))[1]
     for dir_ in image_dirs:
         process_all_imgs(os.path.join(IMAGE_DIRECTORY, dir_), os.path.join(IMAGE_DIRECTORY, dir_ + "-processed"))
