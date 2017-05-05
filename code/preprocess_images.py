@@ -55,7 +55,7 @@ def process_all_imgs(img_dir, target_dir):
         if is_color(img):
             img = square_crop(img)
             img = correct_resolution(img, RESOLUTION)  # change to 224 resolution
-            io.imsave(os.path.join(target_dir, img_fname), img)
+            io.imsave(os.path.join(target_dir, img_fname), (img * 256).astype("uint8"))
 
 
 if __name__ == "__main__":
