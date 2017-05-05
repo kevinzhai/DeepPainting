@@ -15,7 +15,7 @@ from keras.optimizers import Adam#, SGD, RMSprop, Adagrad
 np.seterr(divide='ignore', invalid='ignore')
 #%%
 class ProjectConfig:
-    basepath      = "assignment2-data"
+    basepath      = "project-data"
     imsize        = (32,) * 2 # n x n square images, VGG default is 224x224
     tsize         = imsize + (3,)
     trainfolder   = os.path.join(basepath, 'train-%s' % str(tsize))
@@ -24,7 +24,7 @@ class ProjectConfig:
 # Model settings    
 cfg = ProjectConfig()
 cfg.vgglayers     = 2        # Number of VGG layers to create, 0-5 layers
-cfg.xferlearning  = 4       # Enable transfer learning up to layer n (max 12, -1 = off)
+cfg.xferlearning  = -1       # Enable transfer learning up to layer n (max 12, -1 = off)
 cfg.freeze_conv   = True     # Freeze convolutional layers
 cfg.fclayersize   = 128      # Size of fully connected layers
 cfg.fclayers      = 2        # Number of fully connected layers
@@ -88,7 +88,7 @@ class DataSet:
                     path = os.path.join(root, f)
                     if path in self.data['Path']: continue # Ignore files that we've already seen
                     if f[0] == '.': continue               # Ignore hidden files  
-                    if '.png' not in f.lower(): continue   # Ignore non-PNG files
+                    if '.jpg' not in f.lower(): continue   # Ignore non-PNG files
                     row = (t, path, cls, f, 0, 0, 0, np.nan, np.nan)
                     to_insert.append(row)
         newdata   = pd.DataFrame(data=to_insert, columns=self.columns)
@@ -108,7 +108,7 @@ def load_data(basepath, samples_per_class=3):
     for root, dirs, files in tqdm.tqdm(os.walk(basepath), mininterval=3, desc='Loading batch data', total=len(obj_classes)):
         random.shuffle(dirs)        
         for i, f in enumerate(random.sample(files, min(len(files), samples_per_class))):
-            if '.png' not in f.lower(): continue
+            if '.jpg' not in f.lower(): continue
             try: 
                 im = scipy.misc.imread(os.path.join(root, f))
                 im = scipy.misc.imresize(im, cfg.imsize, interp='bicubic')                
@@ -123,6 +123,7 @@ def load_data(basepath, samples_per_class=3):
     shuffle_ind = list(range(len(xdata)))
     random.shuffle(shuffle_ind)
     xdata  = np.array(xdata, dtype='float32')
+    #print(xdata)
     xdata -= xdata.min()
     xdata /= xdata.max()
     return xdata[shuffle_ind], np.array(ydata, dtype='float32')[shuffle_ind], obj_classes
