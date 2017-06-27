@@ -1,10 +1,11 @@
 import os
-from skimage import io, transform
 import tqdm
+from random import shuffle
+from skimage import io, transform
 
 # PARAMETERS
-IMAGE_DIRECTORY = "../data/flickr"
-RESOLUTION = 32
+IMAGE_DIRECTORY = "../data/flickr/"
+RESOLUTION = 64
 
 
 def is_color(img):
@@ -40,25 +41,32 @@ def correct_resolution(img, res):
     return transform.resize(img, (res, res, 3))
 
 
-def process_all_imgs(img_dir, target_dir):
+def process_all_imgs(img_dir, target_dir, rename_imgs=False, shuffle_imgs=False):
     """
     processes all images in img_dir, applying square crop and resize
     saves processed images to target_dir
     """
     os.makedirs(target_dir, exist_ok=True)
     img_list = os.listdir(img_dir)
+    if shuffle_imgs:
+        img_list = shuffle(img_list)
 
     print("Processing images from:", img_dir, "\nSaving images to:", target_dir)
-    for img_fname in tqdm.tqdm(img_list):
-
-        img = io.imread(os.path.join(img_dir, img_fname))
-        if is_color(img):
-            img = square_crop(img)
-            img = correct_resolution(img, RESOLUTION)  # change to 224 resolution
-            io.imsave(os.path.join(target_dir, img_fname), (img * 256).astype("uint8"))
+    for i, img_fname in tqdm.tqdm(enumerate(img_list)):
+        print(img_fname)
+        try:
+            img = io.imread(os.path.join(img_dir, img_fname))
+            if rename_imgs:
+                img_fname = str(i).rjust(5, "0") + ".jpg"
+            if is_color(img):
+                img = square_crop(img)
+                img = correct_resolution(img, RESOLUTION)  # change to 224 resolution
+                io.imsave(os.path.join(target_dir, img_fname), (img * 256).astype("uint8"))
+        except OSError:
+            continue
 
 
 if __name__ == "__main__":
-    image_dirs = next(os.walk(IMAGE_DIRECTORY))[1]
-    for dir_ in image_dirs:
-        process_all_imgs(os.path.join(IMAGE_DIRECTORY, dir_), os.path.join(IMAGE_DIRECTORY, dir_ + "-processed"))
+    process_all_imgs("../cyclegan/results/cubism_v2_animation",
+                     "../cyclegan/results/cubism_v2_animation_processed_64",
+                     rename_imgs=False)
