@@ -1,17 +1,3 @@
-""" Northwestern MSiA 490 Deep learning 
-    Assignment #2 starter code, Spring 2017
-    This code demonstrates the use of transfer learning to speed up
-    the training process for a convolutional neural network.
-    Notes:
-        - Heatmaps may appear black in the first few epochs. Run to ~500 to get decent maps.
-        - Watch out for memory usage. Big jobs get terminated by the system when memory is low.
-        - The native image size is 224x224 for VGG, resize/crop your images to match
-        - Filter visualization is slow, change cfg.vizfilt_timeout for more speed or accuracy
-        - Be sure to rename/delete the basepath when changing model parameters, e.g. layers or random labels
-        - Change cfg.spercls to use larger/smaller batches
-        - Filter visualization is not compatible with batch normalization
-        - 3 step process: (1) Overfit training set (min size), (2) Fit random labels (max size), (3) Regularize for test/validation set
-"""
 import os
 import time
 import numpy as np
@@ -20,53 +6,72 @@ import random
 import tqdm
 import pandas as pd
 import socket
+import psutil
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from keras.optimizers import Adam  # , SGD, RMSprop, Adagrad
+from keras.optimizers import Adam
 np.seterr(divide='ignore', invalid='ignore')
-#%%
-
 
 class ProjectConfig:
-    basepath = "assignment2-data"
-    imsize = (32,) * 2  # n x n square images, VGG default is 224x224
+    basepath = '/home/ubuntu/DeepPainting/flickr-64-sample-3000'
+    model_subdirectory = 'model3'
+    if os.path.exists(os.path.join(basepath, model_subdirectory)):
+        input("Model directory already exists. Are you sure you want to override? Press any ENTER to continue...")
+    imsize = (64,) * 2  # n x n square images, VGG default is 224x224
     tsize = imsize + (3,)
-    trainfolder = os.path.join(basepath, 'train-%s' % str(tsize))
+    trainfolder = os.path.join(basepath, 'train')
     # Set test = train to overfit train data
-    testfolder = os.path.join(basepath, 'test-%s' % str(tsize))
+    testfolder = os.path.join(basepath, 'test')
+
+
+### additional parameters
+img_extension = '.jpg'
+train_samples_per_class = 2000
+test_samples_per_class = 500
+show_heatmap = True
+show_conv_filters = False
+gpu_fraction = 1.0
+###
+
 
 # Model settings
 cfg = ProjectConfig()
 cfg.vgglayers = 2        # Number of VGG layers to create, 0-5 layers
 # Enable transfer learning up to layer n (max 12, -1 = off)
 cfg.xferlearning = -1
-cfg.freeze_conv = True     # Freeze convolutional layers
+cfg.freeze_conv = False    # Freeze convolutional layers
 cfg.fclayersize = 128      # Size of fully connected (FC) layers
-cfg.fclayers = 0        # Number of FC layers
-cfg.fcdropout = 0.0      # Dropout regularization factor for FC layers
+cfg.fclayers = 2        # Number of FC layers
+cfg.fcdropout = 0.4      # Dropout regularization factor for FC layers
 cfg.l1 = 0.0      # L1 regularization for FC
 cfg.l2 = 0.0      # L2 regularization for FC
 # Random labels (remember to rename/delete existing data folder)
 cfg.randomlbls = False
 
 # Optimizer settings
-optimizer = Adam()
+optimizer = Adam(lr=.00001)
 # Change for early stopping regularization
 cfg.batch_size, cfg.nb_epoch = 32, 10000
 cfg.batchnorm = False    # Batch normalization (incompatible with filter viz)
 cfg.saveloadmodel = True     # Save/load models to reduce training time
-cfg.spercls = 300      # Number of samples per class
+cfg.spercls = train_samples_per_class     # Number of samples per class
 
 # Visualization settings
 cfg.hsv = False    # Convert images to Hue/Saturation/Value to be more robust to colors
 # Decrease for speed, increase for better viz. 0 = off.
-cfg.vizfilt_timeout = 3
+cfg.vizfilt_timeout = 0
 
 # Model checkpointing/stats
+os.makedirs(os.path.join(cfg.basepath, cfg.model_subdirectory), exist_ok=True)
+os.makedirs(os.path.join(cfg.basepath, cfg.model_subdirectory, "loss"), exist_ok=True)
+os.makedirs(os.path.join(cfg.basepath, cfg.model_subdirectory, "filters"), exist_ok=True)
+print(os.path.join(os.path.join(cfg.basepath, cfg.model_subdirectory)))
 cfg.modelarch = 'vgg%d-fcl%d-fcs%d-%s-%s' % (cfg.vgglayers, cfg.fclayers,
                                              cfg.fclayersize, 'hsv' if cfg.hsv else 'rgb', socket.gethostname())
-cfg.modelid = os.path.join(cfg.basepath, 'model-%s.h5' % cfg.modelarch)
+cfg.modelid = os.path.join(cfg.basepath, cfg.model_subdirectory, 'model-%s.h5' % cfg.modelarch)
 cfg.trainstats = os.path.join(
-    cfg.basepath, 'trainstats-%s.csv' % cfg.modelarch)
+    cfg.basepath, cfg.model_subdirectory, 'trainstats-%s.csv' % cfg.modelarch)
 
 #%% Image data augmentation
 from keras.preprocessing.image import ImageDataGenerator
@@ -77,25 +82,23 @@ datagen = ImageDataGenerator(
     samplewise_std_normalization=False,     # divide each input by its std
     zca_whitening=False,                    # apply ZCA whitening
     # randomly rotate images in the range (degrees, 0 to 180)
-    rotation_range=5,
+    rotation_range=0,
     # randomly shift images horizontally (fraction of total width)
-    width_shift_range=0.1,
+    width_shift_range=0.0,
     # randomly shift images vertically (fraction of total height)
-    height_shift_range=0.1,
-    horizontal_flip=True,                   # randomly flip images
-    vertical_flip=True)                     # randomly flip images
+    height_shift_range=0.0,
+    horizontal_flip=False,                  # randomly flip images
+    vertical_flip=False)                    # randomly flip images
 #%% ------ CPU/GPU memory fix -------
 import tensorflow as tf
 import keras.backend.tensorflow_backend as ktf
 
 
-def get_session(gpu_fraction=0.25):
+def get_session(gpu_fraction=gpu_fraction):
     gpu_options = tf.GPUOptions(
         per_process_gpu_memory_fraction=gpu_fraction, allow_growth=True)
     return tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
 ktf.set_session(get_session())
-
-import psutil
 
 
 def check_memusage():
@@ -125,9 +128,9 @@ def makedata(basepath):
                 scipy.misc.imsave(pn, scipy.misc.imresize(
                     im, cfg.imsize, interp='bicubic'))
 # makedata(cfg.basepath)  # Comment out this line to use your own data
-
-
 #%% Dataset loader
+
+
 class DataSet:
 
     def __init__(self):
@@ -149,8 +152,8 @@ class DataSet:
                         continue  # Ignore files that we've already seen
                     if f[0] == '.':
                         continue               # Ignore hidden files
-                    if '.png' not in f.lower():
-                        continue   # Ignore non-PNG files
+                    if img_extension not in f.lower():
+                        continue
                     row = (t, path, cls, f, 0, 0, 0, np.nan, np.nan)
                     to_insert.append(row)
         newdata = pd.DataFrame(data=to_insert, columns=self.columns)
@@ -173,7 +176,7 @@ def load_data(basepath, samples_per_class=3):
     for root, dirs, files in tqdm.tqdm(os.walk(basepath), mininterval=3, desc='Loading batch data', total=len(obj_classes)):
         random.shuffle(dirs)
         for i, f in enumerate(random.sample(files, min(len(files), samples_per_class))):
-            if '.png' not in f.lower():
+            if img_extension not in f.lower():
                 continue
             try:
                 im = scipy.misc.imread(os.path.join(root, f))
@@ -198,7 +201,7 @@ def load_data(basepath, samples_per_class=3):
 # Load test data
 from keras.utils import np_utils
 X_test, y_test, obj_classes = load_data(
-    cfg.testfolder, samples_per_class=99999)
+    cfg.testfolder, samples_per_class=test_samples_per_class)
 class_to_idx = dict([(y, x) for (x, y) in enumerate(obj_classes)])
 img_rows, img_cols, img_channels = X_test.shape[1:]
 Y_test = np_utils.to_categorical(y_test, len(obj_classes))
@@ -211,6 +214,8 @@ from keras.regularizers import l1_l2
 from keras.layers import Flatten, Dense, Input, Convolution2D, MaxPooling2D, BatchNormalization
 
 img_input = Input(shape=cfg.tsize)
+if cfg.vgglayers == 0:
+    x = img_input
 if cfg.vgglayers >= 1:  # Block 1
     x = Convolution2D(64, (3, 3), activation='relu',
                       padding='same', name='block1_conv1')(img_input)
@@ -260,7 +265,8 @@ if cfg.vgglayers >= 5:  # Block 5
 
 x = Flatten(name='flatten')(x)
 for i in range(cfg.fclayers):
-    x = Dense(cfg.fclayersize, kernel_regularizer=l1_l2(cfg.l1, cfg.l2))(x)
+    x = Dense(cfg.fclayersize, activation='relu',
+              kernel_regularizer=l1_l2(cfg.l1, cfg.l2))(x)
 x = Dense(len(obj_classes), activation='softmax', name='predictions')(x)
 
 inputs = img_input
@@ -288,7 +294,7 @@ for i, l in enumerate(modelconv):
 #%% Visualization code
 
 
-def viz_losses(stats):
+def viz_losses(stats, epoch):
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 6))
     epoch = len(stats)
     fig.suptitle("Training vgglayers=%d, fclayers=%d, fcsize=%d, epoch=%d" % (
@@ -297,6 +303,8 @@ def viz_losses(stats):
     ax1.plot(stats['Test loss'].values, label='Test loss', color='green')
     ax1.set_yscale('log')
     ax2.plot(stats['Accuracy'].values, label='Test accuracies', color='red')
+    ax2.plot(stats['Train accuracy'].values,
+             label='Train accuracies', color='blue')
     ax2.axhline(1.0 / len(obj_classes), linestyle='dashed', color='gray')
     ax2.text(0, 1.0 / len(obj_classes), 'Chance')
     ax2.axhline(np.max(stats['Accuracy']), linestyle='dashed', color='red')
@@ -304,6 +312,7 @@ def viz_losses(stats):
     ax2.set_ylim([0, 1])
     ax2.set_title('Accuracy: %0.2f%%' % (100.0 * stats['Accuracy'].values[-1]))
     ax1.legend(), ax2.legend()
+    plt.savefig(os.path.join(cfg.basepath, cfg.model_subdirectory, "loss", 'loss-epoch-' + str(epoch).rjust(5, "0") + '.png'))
     plt.show()
     plt.close()
 #%% Explanations
@@ -337,7 +346,7 @@ class Heatmap:
                 masks.append(mask)
         return np.array(masks)
 
-    def explain_prediction_heatmap(self, im, actual):
+    def explain_prediction_heatmap(self, im, actual, epoch):
         import skimage.color
 
         def hsv(im): return skimage.color.hsv2rgb(im) if cfg.hsv else im
@@ -373,6 +382,7 @@ class Heatmap:
             axes[0, n + 1].set_title(self.obj_classes[i] +
                                      ': %0.1f%%' % (100 * predictions[i] / predictions.sum()))
         fig.tight_layout()
+        plt.savefig(os.path.join(cfg.basepath, cfg.model_subdirectory, "heatmaps", "heatmap-epoch-" + str(epoch) + ".png"))
         plt.show()
         plt.close()
         return heatmaps
@@ -406,6 +416,7 @@ class Viz_filters:
         input_img_data = (input_img_data - 0.5) * 20 + 128
 
         tm = time.time()
+        print("\nVisualizing filters.")
         for i in tqdm.tqdm(range(max_steps), desc='Filter visualization', mininterval=3):
             loss_value, grads_value = iterate([input_img_data])
             input_img_data += grads_value * step
@@ -431,6 +442,8 @@ class Viz_filters:
                     plt.subplot(1, nbfilters, j + 1)
                     self.viz_filter_max(layer_name, random.randint(
                         0, nfilters - 1), timeout=cfg.vizfilt_timeout)
+                plt.savefig(os.path.join(
+                    cfg.basepath, cfg.model_subdirectory, 'filters', 'filters-' + str(epoch).rjust(5, "0") + ".png"))
                 plt.show()
                 plt.close()
         except KeyboardInterrupt:
@@ -443,61 +456,73 @@ class Explainer:
         self.model = model
         self.obj_classes = obj_classes
         self.class_to_idx = class_to_idx
-        self.show_conv_filters = True
-        self.show_heatmap = True
+        self.show_conv_filters = show_conv_filters
+        self.show_heatmap = show_heatmap
+        if self.show_heatmap:
+            heatmap_path = os.path.join(cfg.basepath, cfg.model_subdirectory, "heatmaps")
+            os.makedirs(heatmap_path, exist_ok=True)
 
-    def explain(self, im, cls):
+    def explain(self, im, cls, epoch):
         heatmap = Heatmap(self.model, self.obj_classes)
         if self.show_heatmap:
-            heatmap.explain_prediction_heatmap(im, self.obj_classes[cls])
+            heatmap.explain_prediction_heatmap(im, self.obj_classes[cls], epoch)
+
 
 explainer = Explainer(model, obj_classes, class_to_idx)
+
+
 #%%
-
-
-def test_prediction(im=None, y=None):
+def test_prediction(im=None, y=None, epoch=0):
     t_img = random.randint(0, len(X_train) - 1)
     if im is None:
         im, y = X_train[t_img], Y_train[t_img]
     pred = model.predict(np.expand_dims(im, 0))
     cls = np.argmax(y)
-    explainer.explain(im, cls)
+    explainer.explain(im, cls, epoch)
     print("Actual: %s(%d)" % (obj_classes[cls], cls))
     for cls in list(reversed(np.argsort(pred)[0]))[:5]:
         conf = float(pred[0, cls]) / pred.sum()
         print("    predicted: %010s(%d), confidence=%0.2f [%-10s]" % (
             obj_classes[cls], cls, conf, "*" * int(10 * conf)))
     return pred
+
+
 #%% Training code
 datagen.fit(X_test)
 if cfg.saveloadmodel and os.path.exists(cfg.modelid):
     print("**** Loading existing model: %s ****" % cfg.modelid)
     model.load_weights(cfg.modelid)
+
+
 #%%
 import gc
 vizfilt = Viz_filters(model, img_input, img_rows, img_cols)
-trainstats = pd.DataFrame(columns=('Train loss', 'Test loss', 'Accuracy',))
+trainstats = pd.DataFrame(
+    columns=('Train loss', 'Test loss', 'Accuracy', 'Train accuracy'))
 if os.path.exists(cfg.trainstats):
     trainstats = pd.read_csv(cfg.trainstats, dtype='float32')
+
+X_train, y_train, obj_classes = load_data(cfg.trainfolder, cfg.spercls)
+Y_train = np_utils.to_categorical(y_train, len(obj_classes))
 for e in range(cfg.nb_epoch):
-    print('Training... epoch=%d/%d' % (e, cfg.nb_epoch))
-    X_train, y_train, obj_classes = load_data(cfg.trainfolder, cfg.spercls)
-    Y_train = np_utils.to_categorical(y_train, len(obj_classes))
+    print('Training.ß.. epoch=%d/%d' % (e, cfg.nb_epoch))
     loss = model.fit_generator(datagen.flow(X_train, Y_train, shuffle=True,
                                             batch_size=cfg.batch_size),
                                steps_per_epoch=1,
                                epochs=1,
                                validation_data=(X_test, Y_test),
                                verbose=0)
+    print("Accuracy:", loss.history['val_acc'][0] * 100)
+    tloss = model.evaluate(X_train, Y_train)
     if cfg.saveloadmodel and e % 50 == 0:
         model.save_weights(cfg.modelid, overwrite=True)
     trainstats.loc[len(trainstats)] = (loss.history['loss'][0], loss.history[
-        'val_loss'][0], loss.history['val_acc'][0])
-    if random.randint(0, 10) == 0:
+        'val_loss'][0], loss.history['val_acc'][0], tloss[1])
+    if e % 10 == 0:
         trainstats.to_csv(cfg.trainstats, index=False)
-        viz_losses(trainstats)
-        t_ind = random.randint(0, len(X_train) - 1)
-        test_prediction(X_train[t_ind], Y_train[t_ind])
+        viz_losses(trainstats, e)
+        t_ind = random.randint(0, len(X_test) - 1)
+        test_prediction(X_test[t_ind], Y_test[t_ind], epoch=e)
     if e % 30 == 29 and cfg.vizfilt_timeout > 0:
         vizfilt.viz_filters()
     check_memusage()
