@@ -1,5 +1,5 @@
 # DeepPainting
-### Jessica Chan, Eric Chang, Aron Liu, Kevin Zhai
+### Kevin Zhai, Jessica Chan, Eric Chang, Aron Liu
 
 Evaluating the performance of Convolutional Neural Networks applied to recognition of painting styles and using Generative Adversarial Networks to perform image and video style transfer with entire genres of paintings.
 
